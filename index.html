@@ -100,8 +100,15 @@ header {
 #new-chat-btn:hover { background: var(--color-border-focus); }
 #search-history { width: 100%; font-size: var(--text-sm); padding: 8px 12px; }
 #history-list { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
-.history-item { padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; color: var(--color-text-secondary); transition: background 0.2s, color 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* History Item & Delete Button */
+.history-item-wrapper { position: relative; margin-bottom: 8px; }
+.history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 8px; cursor: pointer; color: var(--color-text-secondary); transition: background 0.2s, color 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0; }
+.history-item span { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .history-item:hover, .history-item.active { background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.delete-chat-btn { background: none; border: none; color: var(--color-text-muted); font-size: var(--text-sm); padding: 4px; margin-left: 8px; cursor: pointer; opacity: 0; transition: color 0.2s, opacity 0.2s; flex-shrink: 0; }
+.history-item:hover .delete-chat-btn, .history-item.active .delete-chat-btn { opacity: 1; color: var(--color-text-secondary); }
+.delete-chat-btn:hover { color: #d9534f; }
 
 /* Chat View */
 #chat-view { flex: 1; display: flex; flex-direction: column; position: relative; }
@@ -136,6 +143,10 @@ header {
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .modal-body { display: flex; flex-direction: column; gap: 16px; }
+
+/* Modal Clear Button */
+#clear-current-chat-btn { background-color: #d9534f; color: var(--color-text-primary); border: 1px solid #c9302c; width: 100%; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 16px; }
+#clear-current-chat-btn:hover { background-color: #c9302c; }
 
 /* Settings View */
 #settings-view { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: var(--color-bg-deep); z-index: 20; padding: 20px; overflow-y: auto; display: none; }
@@ -242,7 +253,7 @@ header {
       <section class="settings-section">
         <h2>AIモデル管理</h2>
         <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:12px;">
-          各プロバイダーにカスタムモデルを追加できます。
+          各プロバイダーにカスタムモデルを追加・編集できます。
         </p>
         <div class="setting-group">
           <label>プロバイダー</label>
@@ -324,6 +335,9 @@ header {
         <label>モデル</label>
         <select id="model-select" title="モデルを選択"></select>
       </div>
+      
+      <!-- チャットクリアボタン -->
+      <button id="clear-current-chat-btn">このチャットをクリア</button>
     </div>
   </div>
 </div>
@@ -403,16 +417,21 @@ async function init() {
     document.getElementById('fs-status-text').textContent = `設定済: ${currentFsHandle.name}`;
   }
 
-  // Populate Selects & Restore previous selections
+  // Populate Selects & Restore previous selections for Modal
+  const modalProviderSelect = document.getElementById('provider-select');
+  const modalModelSelect = document.getElementById('model-select');
+  const modalRoleSelect = document.getElementById('role-select');
+
   const lastProvider = await db.settings.get('last_provider-select');
-  if (lastProvider) document.getElementById('provider-select').value = lastProvider.value;
+  if (lastProvider) modalProviderSelect.value = lastProvider.value;
   await updateProviderModels();
+  
   const lastModel = await db.settings.get('last_model-select');
-  if (lastModel) document.getElementById('model-select').value = lastModel.value;
+  if (lastModel) modalModelSelect.value = lastModel.value;
   
   await loadRolesToSelect();
   const lastRole = await db.settings.get('last_role-select');
-  if (lastRole) document.getElementById('role-select').value = lastRole.value;
+  if (lastRole) modalRoleSelect.value = lastRole.value;
 
   // Load History
   await loadHistoryList();
@@ -558,9 +577,26 @@ document.getElementById('menu-btn').addEventListener('click', () => {
 
 // Chat Settings Modal
 const chatSettingsModal = document.getElementById('chat-settings-modal-overlay');
-document.getElementById('chat-settings-btn').addEventListener('click', () => {
+const modalProviderSelect = document.getElementById('provider-select');
+const modalModelSelect = document.getElementById('model-select');
+const modalRoleSelect = document.getElementById('role-select');
+
+document.getElementById('chat-settings-btn').addEventListener('click', async () => {
+  // モーダル表示時に現在の設定をロード
+  const lastProvider = await db.settings.get('last_provider-select');
+  if (lastProvider) modalProviderSelect.value = lastProvider.value;
+  await updateProviderModels();
+  
+  const lastModel = await db.settings.get('last_model-select');
+  if (lastModel) modalModelSelect.value = lastModel.value;
+
+  await loadRolesToSelect();
+  const lastRole = await db.settings.get('last_role-select');
+  if (lastRole) modalRoleSelect.value = lastRole.value;
+
   chatSettingsModal.classList.add('show');
 });
+
 document.getElementById('close-chat-settings-modal').addEventListener('click', () => {
   chatSettingsModal.classList.remove('show');
 });
@@ -568,16 +604,16 @@ chatSettingsModal.addEventListener('click', (e) => {
   if (e.target === chatSettingsModal) chatSettingsModal.classList.remove('show');
 });
 
-// Save selections on change
-document.getElementById('provider-select').addEventListener('change', async (e) => {
+// Save selections on change within modal
+modalProviderSelect.addEventListener('change', async (e) => {
   await updateProviderModels();
   await db.settings.put({ key: 'last_provider-select', value: e.target.value });
-  await db.settings.put({ key: 'last_model-select', value: document.getElementById('model-select').value });
+  await db.settings.put({ key: 'last_model-select', value: modalModelSelect.value });
 });
-document.getElementById('model-select').addEventListener('change', async (e) => {
+modalModelSelect.addEventListener('change', async (e) => {
   await db.settings.put({ key: 'last_model-select', value: e.target.value });
 });
-document.getElementById('role-select').addEventListener('change', async (e) => {
+modalRoleSelect.addEventListener('change', async (e) => {
   await db.settings.put({ key: 'last_role-select', value: e.target.value });
 });
 
@@ -596,6 +632,50 @@ document.getElementById('search-history').addEventListener('input', async (e) =>
   const query = e.target.value.toLowerCase();
   await loadHistoryList(query);
 });
+
+// Clear Current Chat
+document.getElementById('clear-current-chat-btn').addEventListener('click', async () => {
+  if (!currentChatId) {
+    showToast('クリアするチャットがありません。');
+    return;
+  }
+  if (!confirm('本当にこのチャットの履歴をすべてクリアしますか？この操作は元に戻せません。')) {
+    return;
+  }
+  try {
+    await db.messages.where('chatId').equals(currentChatId).delete();
+    await db.chats.update(currentChatId, { title: '新しいチャット', updatedAt: Date.now() });
+    document.getElementById('chat-messages').innerHTML = '';
+    showToast('チャットをクリアしました。');
+    await loadHistoryList();
+    chatSettingsModal.classList.remove('show');
+  } catch (error) {
+    console.error('チャットクリア中にエラーが発生しました:', error);
+    alert('チャットのクリアに失敗しました。');
+  }
+});
+
+// Delete specific Chat session
+window.deleteChatSession = async (chatIdToDelete, event) => {
+  event.stopPropagation();
+  if (!confirm('本当にこのチャットセッションを削除しますか？この操作は元に戻せません。')) {
+    return;
+  }
+  try {
+    await db.messages.where('chatId').equals(chatIdToDelete).delete();
+    await db.chats.delete(chatIdToDelete);
+    showToast('チャットセッションを削除しました。');
+
+    if (currentChatId === chatIdToDelete) {
+      await startNewChat();
+    } else {
+      await loadHistoryList();
+    }
+  } catch (error) {
+    console.error('チャットセッション削除中にエラーが発生しました:', error);
+    alert('チャットセッションの削除に失敗しました。');
+  }
+};
 
 // --- Settings Logic ---
 document.getElementById('save-api-keys').addEventListener('click', async () => {
@@ -748,9 +828,9 @@ window.editCustomModel = async (provider, oldModelName) => {
     customModels[index] = newModelName.trim();
     await saveCustomModels(provider, customModels);
     
-    // 現在選択中のモデルだった場合、更新
-    const currentModelSelect = document.getElementById('model-select');
-    if (document.getElementById('provider-select').value === provider && currentModelSelect.value === oldModelName) {
+    const currentProvider = await db.settings.get('last_provider-select');
+    const currentModel = await db.settings.get('last_model-select');
+    if (currentProvider && currentProvider.value === provider && currentModel && currentModel.value === oldModelName) {
       await db.settings.put({ key: 'last_model-select', value: newModelName.trim() });
     }
 
@@ -804,11 +884,26 @@ async function loadHistoryList(query = '') {
   if (query) chats = chats.filter(c => c.title.toLowerCase().includes(query));
 
   chats.forEach(c => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'history-item-wrapper';
+
     const div = document.createElement('div');
     div.className = `history-item ${c.id === currentChatId ? 'active' : ''}`;
-    div.textContent = c.title;
     div.onclick = () => openChat(c.id);
-    list.appendChild(div);
+
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = c.title;
+    div.appendChild(titleSpan);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-chat-btn';
+    deleteBtn.title = 'チャットを削除';
+    deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+    deleteBtn.onclick = (e) => window.deleteChatSession(c.id, e);
+    
+    div.appendChild(deleteBtn);
+    wrapper.appendChild(div);
+    list.appendChild(wrapper);
   });
 }
 
@@ -889,10 +984,16 @@ async function sendMessage() {
     await db.chats.update(currentChatId, { updatedAt: Date.now() });
   }
 
-  // Prepare AI Request
-  const provider = document.getElementById('provider-select').value;
-  const model = document.getElementById('model-select').value;
-  const roleId = document.getElementById('role-select').value;
+  // Prepare AI Request based on current settings in IndexedDB
+  const providerRecord = await db.settings.get('last_provider-select');
+  const provider = providerRecord ? providerRecord.value : 'gemini';
+  
+  const modelRecord = await db.settings.get('last_model-select');
+  const model = modelRecord ? modelRecord.value : DEFAULT_MODELS[provider][0];
+  
+  const roleRecordSet = await db.settings.get('last_role-select');
+  const roleId = roleRecordSet ? roleRecordSet.value : PRESET_ROLES[0].id;
+  
   const roleRecord = await db.roles.get(roleId);
   const systemPrompt = roleRecord ? roleRecord.prompt : '';
   const apiKeyRecord = await db.settings.get(`apikey_${provider}`);
