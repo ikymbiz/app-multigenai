@@ -23,7 +23,7 @@
   --color-border-focus:  #4A4F5E;
 
   /* Text */
-  --color-text-primary:  #E8EAF0;
+  --color-text-primary:  #E8E4F0;
   --color-text-secondary:#6B7280;
   --color-text-muted:    #3D4251;
 
@@ -120,7 +120,6 @@ header {
 /* Input Area & Controls */
 .input-area { padding: 0 0 20px 0; background: var(--color-bg-deep); display: flex; flex-direction: column; align-items: center; }
 .input-area-content { max-width: 800px; width: 100%; display: flex; flex-direction: column; margin: 0 20px; box-sizing: border-box; }
-.current-settings-display { font-size: var(--text-xs); color: var(--color-text-secondary); text-align: center; margin-bottom: 8px; padding: 8px 0 0 0; }
 #progress-indicator { display: none; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--color-text-secondary); justify-content: center; margin-bottom: 8px; }
 .input-container { width: 100%; display: flex; gap: 12px; align-items: flex-end; background: var(--color-bg-surface); padding: 12px; border-radius: 16px; border: 1px solid var(--color-border); }
 .input-container:focus-within { border-color: var(--color-border-focus); }
@@ -198,14 +197,13 @@ header {
     
     <div class="input-area">
       <div class="input-area-content">
-        <div id="current-ai-settings-text" class="current-settings-display"></div>
         <div id="progress-indicator">
           <div class="spinner"></div> <span>生成中...</span>
         </div>
         
         <div class="input-container">
           <button id="chat-settings-btn" title="AI設定"><i class="fas fa-pen"></i></button>
-          <textarea id="message-input" placeholder="メッセージを入力... (Shift+Enterで改行)" rows="1"></textarea>
+          <textarea id="message-input" placeholder="メッセージを入力... (Enterで改行)" rows="1"></textarea>
           <button id="send-btn" title="送信"><i class="fas fa-paper-plane"></i></button>
         </div>
       </div>
@@ -416,8 +414,6 @@ async function init() {
   const lastRole = await db.settings.get('last_role-select');
   if (lastRole) document.getElementById('role-select').value = lastRole.value;
 
-  updateCurrentAiSettingsText();
-
   // Load History
   await loadHistoryList();
 
@@ -436,21 +432,6 @@ async function init() {
   const unsavedInput = localStorage.getItem('unsavedInput');
   if (unsavedInput) {
     document.getElementById('message-input').value = unsavedInput;
-  }
-}
-
-function updateCurrentAiSettingsText() {
-  const roleSelect = document.getElementById('role-select');
-  const providerSelect = document.getElementById('provider-select');
-  const modelSelect = document.getElementById('model-select');
-  
-  const roleName = roleSelect.options[roleSelect.selectedIndex]?.text || '';
-  const providerName = providerSelect.options[providerSelect.selectedIndex]?.text || '';
-  const modelName = modelSelect.options[modelSelect.selectedIndex]?.text || '';
-
-  const displayEl = document.getElementById('current-ai-settings-text');
-  if(displayEl) {
-    displayEl.textContent = `${providerName} (${modelName}) - ${roleName}`;
   }
 }
 
@@ -592,15 +573,12 @@ document.getElementById('provider-select').addEventListener('change', async (e) 
   await updateProviderModels();
   await db.settings.put({ key: 'last_provider-select', value: e.target.value });
   await db.settings.put({ key: 'last_model-select', value: document.getElementById('model-select').value });
-  updateCurrentAiSettingsText();
 });
 document.getElementById('model-select').addEventListener('change', async (e) => {
   await db.settings.put({ key: 'last_model-select', value: e.target.value });
-  updateCurrentAiSettingsText();
 });
 document.getElementById('role-select').addEventListener('change', async (e) => {
   await db.settings.put({ key: 'last_role-select', value: e.target.value });
-  updateCurrentAiSettingsText();
 });
 
 document.getElementById('new-chat-btn').addEventListener('click', startNewChat);
@@ -610,12 +588,6 @@ messageInput.addEventListener('input', () => {
   messageInput.style.height = 'auto';
   messageInput.style.height = messageInput.scrollHeight + 'px';
   localStorage.setItem('unsavedInput', messageInput.value);
-});
-messageInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
 });
 document.getElementById('send-btn').addEventListener('click', sendMessage);
 
@@ -675,7 +647,6 @@ document.getElementById('add-role-btn').addEventListener('click', async () => {
   showToast('役割を追加しました');
   await loadSettingsRoleList();
   await loadRolesToSelect();
-  updateCurrentAiSettingsText();
 });
 
 window.deleteRole = async (id) => {
@@ -683,7 +654,6 @@ window.deleteRole = async (id) => {
   await db.roles.delete(id);
   await loadSettingsRoleList();
   await loadRolesToSelect();
-  updateCurrentAiSettingsText();
 };
 
 // --- Models Management ---
@@ -761,7 +731,6 @@ document.getElementById('add-model-btn').addEventListener('click', async () => {
   
   if (document.getElementById('provider-select').value === provider) {
     await updateProviderModels();
-    updateCurrentAiSettingsText();
   }
 });
 
@@ -791,7 +760,6 @@ window.editCustomModel = async (provider, oldModelName) => {
       await updateProviderModels();
       const updatedLastModel = await db.settings.get('last_model-select');
       if(updatedLastModel) document.getElementById('model-select').value = updatedLastModel.value;
-      updateCurrentAiSettingsText();
     }
   }
 };
@@ -804,7 +772,6 @@ window.deleteCustomModel = async (provider, modelName) => {
   await loadSettingsModelList();
   if (document.getElementById('provider-select').value === provider) {
     await updateProviderModels();
-    updateCurrentAiSettingsText();
   }
 };
 
