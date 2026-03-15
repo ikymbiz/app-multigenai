@@ -474,6 +474,28 @@ header {
   </div>
 </div>
 
+<!-- Edit Role Modal -->
+<div id="edit-role-modal-overlay" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 style="font-family: var(--font-display); font-size: var(--text-lg);">役割を編集</h3>
+      <button id="close-edit-role-modal" style="font-size: var(--text-lg);"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-role-id">
+      <div class="setting-group">
+        <label>役割名</label>
+        <input type="text" id="edit-role-name" placeholder="役割名">
+      </div>
+      <div class="setting-group">
+        <label>システムプロンプト</label>
+        <textarea id="edit-role-prompt" rows="8" placeholder="システムプロンプトを入力" style="width:100%;resize:vertical;"></textarea>
+      </div>
+      <button class="btn-primary" id="save-edit-role-btn" style="width:100%;padding:12px;margin-top:8px;">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- Image Expansion Modal -->
 <div id="image-modal-overlay" class="image-modal-overlay">
   <div class="image-modal-content">
@@ -1109,9 +1131,13 @@ async function loadSettingsRoleList() {
     const item = document.createElement('div');
     item.className = 'role-item';
     item.innerHTML = `
-      <div><strong>${r.name}</strong><div style="font-size:var(--text-xs);color:var(--color-text-secondary);">${r.prompt.substring(0,30)}...</div></div>
+      <div style="flex:1;min-width:0;margin-right:8px;">
+        <strong>${r.name}</strong>
+        <div style="font-size:var(--text-xs);color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.prompt.substring(0,40)}...</div>
+      </div>
       <div class="role-actions">
-        ${!r.isPreset ? `<button onclick="deleteRole('${r.id}')"><i class="fas fa-trash"></i></button>` : '<span style="font-size:var(--text-xs);">プリセット</span>'}
+        <button onclick="openEditRoleModal('${r.id}')" title="編集"><i class="fas fa-pen"></i></button>
+        ${!r.isPreset ? `<button onclick="deleteRole('${r.id}')" title="削除"><i class="fas fa-trash"></i></button>` : '<span style="font-size:var(--text-xs);">プリセット</span>'}
       </div>
     `;
     list.appendChild(item);
@@ -1136,6 +1162,31 @@ window.deleteRole = async (id) => {
   await loadSettingsRoleList();
   await loadRolesToSelect();
 };
+
+window.openEditRoleModal = async (id) => {
+  const role = await db.roles.get(id);
+  if (!role) return;
+  document.getElementById('edit-role-id').value = role.id;
+  document.getElementById('edit-role-name').value = role.name;
+  document.getElementById('edit-role-prompt').value = role.prompt;
+  document.getElementById('edit-role-modal-overlay').classList.add('show');
+};
+
+document.getElementById('close-edit-role-modal').addEventListener('click', () => {
+  document.getElementById('edit-role-modal-overlay').classList.remove('show');
+});
+
+document.getElementById('save-edit-role-btn').addEventListener('click', async () => {
+  const id = document.getElementById('edit-role-id').value;
+  const name = document.getElementById('edit-role-name').value.trim();
+  const prompt = document.getElementById('edit-role-prompt').value.trim();
+  if (!name || !prompt) return alert('名前とプロンプトを入力してください');
+  await db.roles.update(id, { name, prompt });
+  document.getElementById('edit-role-modal-overlay').classList.remove('show');
+  showToast('役割を更新しました');
+  await loadSettingsRoleList();
+  await loadRolesToSelect();
+});
 
 // --- Models Management ---
 async function getCustomModels(provider) {
